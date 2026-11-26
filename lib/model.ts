@@ -196,26 +196,29 @@ export class SnapshotError extends Error {
 
 const DAY_MS = 86_400_000;
 
-/** A finite number, else `fallback`. */
+/** A finite number, else `fallback`: a missing or unusable figure scores its default. */
 function finite(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  if (typeof value !== 'number') return fallback;
+  return Number.isFinite(value) ? value : fallback;
 }
 
-/** A whole day count from `from` to `to`, clamped at zero; null when either date is absent or bad. */
+/** Whole days a protocol has been listed: the calendar gap from its listing date to `asOf`, never below zero; null when either date is absent or unparseable. */
 export function ageDays(asOf: string, listedAt: string | null): number | null {
   if (listedAt === null) return null;
-  const a = Date.parse(`${asOf}T00:00:00Z`);
-  const b = Date.parse(`${listedAt}T00:00:00Z`);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-  return Math.max(0, Math.floor((a - b) / DAY_MS));
+  const listed = Date.parse(`${listedAt}T00:00:00Z`);
+  const now = Date.parse(`${asOf}T00:00:00Z`);
+  if (!Number.isFinite(listed) || !Number.isFinite(now)) return null;
+  const days = Math.floor((now - listed) / DAY_MS);
+  return days < 0 ? 0 : days;
 }
 
-/** The median of a list of numbers; 0 when the list is empty. */
+/** The middle value of a list: the centre, or the mean of the two centres; 0 when empty. */
 function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const s = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 === 1 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
+  const sorted = [...values].sort((a, b) => a - b);
+  const n = sorted.length;
+  if (n === 0) return 0;
+  const half = n >> 1;
+  return n % 2 === 1 ? sorted[half]! : (sorted[half - 1]! + sorted[half]!) / 2;
 }
 
 /**
@@ -380,30 +383,41 @@ const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 
 /** A step as one string: its action, then its cost and time, within the gate's 20..600 characters. */
 export function stepText(step: FarmStep): string {
-  let s = `${step.text} Cost: ${step.cost}. Time: ${step.time}.`;
-  if (s.length > 600) s = `${s.slice(0, 596)}...`;
-  if (s.length < 20) s = `${s} Hold the position and check the protocol's own page.`;
-  return s;
+  const joined = `${step.text} Cost: ${step.cost}. Time: ${step.time}.`;
+  if (joined.length > 600) return `${joined.slice(0, 596)}...`;
+  if (joined.length < 20) return `${joined} Hold the position and check the protocol's own page.`;
+  return joined;
 }
 
-/** The first chain a protocol names, or a neutral phrase. */
+/** The first chain a protocol names, or a neutral phrase when it names none. */
 function chainOf(p: SnapshotProtocol): string {
-  return p.chains.length > 0 ? p.chains[0]! : 'its main chain';
+  const first = p.chains[0];
+  return first === undefined ? 'its main chain' : first;
 }
 
 /** How much capital one farm position needs, from the protocol's own TVL. */
+const CAPITAL_TIERS: [floor: number, amount: number][] = [
+  [5_000_000_000, 250],
+  [1_000_000_000, 150],
+  [100_000_000, 100],
+];
 function capitalFor(p: SnapshotProtocol): number {
-  if (p.tvl_usd >= 5_000_000_000) return 250;
-  if (p.tvl_usd >= 1_000_000_000) return 150;
-  if (p.tvl_usd >= 100_000_000) return 100;
+  for (const [floor, amount] of CAPITAL_TIERS) {
+    if (p.tvl_usd >= floor) return amount;
+  }
   return 50;
 }
 
 /** How long to hold, from the protocol's age: younger protocols get a longer qualifying window. */
+const HOLD_TIERS: [underDays: number, holdDays: number][] = [
+  [180, 60],
+  [365, 45],
+];
 function holdDaysFor(age: number | null): number {
   if (age === null) return 30;
-  if (age < 180) return 60;
-  if (age < 365) return 45;
+  for (const [underDays, holdDays] of HOLD_TIERS) {
+    if (age < underDays) return holdDays;
+  }
   return 30;
 }
 
