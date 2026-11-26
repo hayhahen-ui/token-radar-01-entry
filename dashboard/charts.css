@@ -1,0 +1,210 @@
+/* Charts and compare tray for Token Radar 2.
+   Same paper/green palette as the board: paper #f5f5f2, panels white,
+   accent green #166534, muted text #6b7280. No network, no images. */
+
+.cx-charts {
+  margin-top: 16px;
+}
+
+.cx-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+
+@media (max-width: 900px) {
+  .cx-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cx-charts h2,
+.cx-compare h2 {
+  font-size: 17px;
+  margin: 0 0 4px;
+}
+
+.cx-sub {
+  color: #6b7280;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+/* --- Top-10 chart (pure SVG, drawn from the board data) --- */
+.cx-top10 {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.cx-top10 text {
+  font-family: inherit;
+  fill: #111827;
+}
+
+.cx-top10 .cx-v {
+  font-weight: 700;
+}
+
+.cx-top10 .cx-r {
+  fill: #6b7280;
+}
+
+/* --- Category breakdown --- */
+.cx-cat {
+  display: grid;
+  grid-template-columns: 178px 1fr 74px;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0efe9;
+}
+
+.cx-cat:last-child {
+  border-bottom: 0;
+}
+
+.cx-cat-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cx-cat-name i {
+  display: block;
+  font-style: normal;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.cx-track {
+  height: 8px;
+  background: #e7e5e0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.cx-track i {
+  display: block;
+  height: 100%;
+  background: #166534;
+  border-radius: 999px;
+}
+
+.cx-cat-val {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cx-note {
+  color: #6b7280;
+  font-size: 12px;
+  margin: 14px 0 0;
+}
+
+/* --- Compare tray --- */
+.cx-compare {
+  margin-top: 16px;
+}
+
+.cx-compare-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.cx-clear {
+  background: #fff;
+  border: 1px solid #d6d3cb;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cx-clear:hover {
+  border-color: #166534;
+  color: #166534;
+}
+
+.cx-hint {
+  color: #b91c1c;
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.cx-table-wrap {
+  overflow-x: auto;
+}
+
+.cx-cmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.cx-cmp-table th,
+.cx-cmp-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid #f0efe9;
+  vertical-align: top;
+}
+
+.cx-cmp-table thead th {
+  border-bottom: 1px solid #d6d3cb;
+}
+
+.cx-cmp-table td.cx-metric {
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.cx-cmp-table .cx-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cx-pos {
+  color: #15803d;
+}
+
+.cx-neg {
+  color: #b91c1c;
+}
+
+.cx-steps {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.cx-steps li {
+  margin-bottom: 6px;
+}
+
+.cx-steps li:last-child {
+  margin-bottom: 0;
+}
+
+/* --- Compare checkbox column in the board table --- */
+.cx-cmp-head {
+  width: 34px;
+}
+
+.cx-cmp-cell {
+  width: 34px;
+  text-align: center;
+}
+
+.cx-cmp-cell input {
+  accent-color: #166534;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
