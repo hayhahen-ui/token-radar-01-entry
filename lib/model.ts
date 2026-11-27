@@ -1,4 +1,4 @@
-// The token radar's model, third version: one snapshot of the protocol universe in, one ranked board out.
+// The token radar's model, fourth version: one snapshot of the protocol universe in, one ranked board out.
 //
 // The board covers every slug in the snapshot's watchlist (the floor, never a ceiling) and may add
 // pre-token protocols below the watchlist floor: the early rows the radar exists to find. A protocol is
@@ -107,7 +107,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it and the rules quote it. */
-export const MODEL_VERSION = 'radar-3';
+export const MODEL_VERSION = 'radar-4';
 
 /** How many pre-token protocols below the watchlist floor the early radar carries, by TVL. */
 export const EARLY_ROWS = 260;
@@ -622,10 +622,12 @@ function weeklyActionFor(p: SnapshotProtocol, capital: number, chain: string): s
 }
 
 /**
- * A protocol's farm plan: seven steps, each an action with a cost and a time. The plan is derived
+ * A protocol's farm plan: eight steps, each an action with a cost and a time. The plan is derived
  * from the protocol's own record (category, chains, TVL, age), never from a hand-written list of
  * names. Gas is the chain's own typical transaction cost, so the same step costs $8 on Ethereum
- * and $0.05 on Polygon, and the plan says which.
+ * and $0.05 on Polygon, and the plan says which. The eighth step totals the plan: the capital
+ * that stays in the position, the gas across every transaction the plan makes (one to open the
+ * wallet, one to set the position up, one a week for the hold), and the minimum hold.
  */
 export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const chain = chainOf(p);
@@ -633,6 +635,9 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const hold = holdDaysFor(age);
   const gas = fmtGas(gasFor(chain));
   const action = actionFor(p, capital, chain);
+  const weeklyTxs = Math.ceil(hold / 7);
+  const txs = 2 + weeklyTxs;
+  const gasTotal = fmtGas(gasFor(chain) * txs);
   return [
     {
       text: `Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.`,
@@ -668,6 +673,11 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       text: `Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.`,
       cost: 'nothing but the log',
       time: '5 minutes',
+    },
+    {
+      text: `Total for this plan: $${capital} of capital stays in the position, about $${gasTotal} of gas across about ${txs} transactions on ${chain}, and at least ${hold} days before you unwind.`,
+      cost: `$${capital} of capital and about $${gasTotal} of gas in all`,
+      time: `${hold} days minimum`,
     },
   ];
 }
