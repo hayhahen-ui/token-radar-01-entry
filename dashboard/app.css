@@ -147,6 +147,7 @@ a { color: var(--green); }
 }
 .field input[type="search"] { width: 280px; max-width: 100%; }
 .field select { max-width: 220px; }
+.field input[type="checkbox"] { width: 20px; height: 20px; margin: 9px 0; accent-color: #166534; }
 .tabs {
   display: flex;
   border: 1px solid #cfcec6;
