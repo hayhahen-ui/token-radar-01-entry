@@ -1,4 +1,4 @@
-// Token Radar's plain dashboard, third version. It reads window.RADAR (written beside dashboard/ by
+// Token Radar's plain dashboard, fourth version. It reads window.RADAR (written beside dashboard/ by
 // main.ts) and renders the ranked board, a filterable table, a per-protocol detail drawer with the
 // model's own inputs and the protocol's farm plan. No network: every byte it shows is in data.js.
 (function () {
@@ -7,7 +7,7 @@
   var DATA = window.RADAR;
   if (!DATA) return;
   var app = document.getElementById('board');
-  var state = { q: '', category: 'all', chain: 'all', tab: 'pre-token', sort: 'implied', dir: -1, selected: null };
+  var state = { q: '', category: 'all', chain: 'all', tab: 'pre-token', sort: 'implied', dir: -1, selected: null, wl: false };
 
   var usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
   function fmtUsd(n) {
@@ -148,6 +148,8 @@
     var capital = capitalFor(p);
     var hold = holdDaysFor(p.age_days);
     var gas = fmtGas(gasFor(chain));
+    var txs = 2 + Math.ceil(hold / 7);
+    var gasTotal = fmtGas(gasFor(chain) * txs);
     return [
       { text: 'Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.', cost: 'about $' + gas + ' of gas for the first transaction on ' + chain, time: '5 minutes' },
       { text: actionFor(p, capital, chain), cost: '$' + capital + ' of capital and about $' + gas + ' of gas to set the position up on ' + chain, time: '15 minutes to set up' },
@@ -155,7 +157,8 @@
       { text: 'Hold the position for at least ' + hold + ' days so the activity is counted in more than one snapshot.', cost: 'the $' + capital + ' stays in the position', time: hold + ' days' },
       { text: "Once a month, open the protocol's own page and check the points balance, the eligibility rules and any new task, so a changed rule does not catch the position out.", cost: 'nothing to check', time: '10 minutes a month' },
       { text: "Before you withdraw, open the protocol's own points or rewards page and claim only from the link it publishes.", cost: 'no fee to check, and never pay to claim', time: '10 minutes' },
-      { text: 'Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.', cost: 'nothing but the log', time: '5 minutes' }
+      { text: 'Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.', cost: 'nothing but the log', time: '5 minutes' },
+      { text: 'Total for this plan: $' + capital + ' of capital stays in the position, about $' + gasTotal + ' of gas across about ' + txs + ' transactions on ' + chain + ', and at least ' + hold + ' days before you unwind.', cost: '$' + capital + ' of capital and about $' + gasTotal + ' of gas in all', time: hold + ' days minimum' }
     ].map(stepText);
   }
 
@@ -167,12 +170,14 @@
     if (params.get('p')) state.selected = params.get('p');
     if (params.get('category')) state.category = params.get('category');
     if (params.get('chain')) state.chain = params.get('chain');
+    if (params.get('wl') === '1') state.wl = true;
   }
   function writeHash() {
     var params = new URLSearchParams();
     if (state.q) params.set('q', state.q);
     if (state.category !== 'all') params.set('category', state.category);
     if (state.chain !== 'all') params.set('chain', state.chain);
+    if (state.wl) params.set('wl', '1');
     if (state.selected) params.set('p', state.selected);
     var next = params.toString();
     if (next) window.history.replaceState(null, '', '#' + next);
@@ -182,6 +187,7 @@
   function rows() {
     var q = state.q.trim().toLowerCase();
     return DATA.rows.filter(function (r) {
+      if (state.wl && !r.watchlist) return false;
       if (state.category !== 'all' && r.category !== state.category) return false;
       if (state.chain !== 'all' && (r.chains || []).indexOf(state.chain) < 0) return false;
       if (!q) return true;
@@ -249,11 +255,14 @@
     chainSelect.addEventListener('change', function () { state.chain = chainSelect.value; writeHash(); render(); });
     var pre = el('button', { type: 'button', 'aria-pressed': state.tab === 'pre-token' ? 'true' : 'false', text: 'Pre-token', onclick: function () { state.tab = 'pre-token'; render(); } });
     var live = el('button', { type: 'button', 'aria-pressed': state.tab === 'live' ? 'true' : 'false', text: 'Live token', onclick: function () { state.tab = 'live'; render(); } });
+    var wlBox = el('input', { type: 'checkbox', id: 'wl-only', checked: state.wl ? 'checked' : null, 'aria-label': 'Watchlist only' });
+    wlBox.addEventListener('change', function () { state.wl = wlBox.checked; writeHash(); render(); });
     return el('div', { class: 'controls' },
       el('div', { class: 'field' }, el('label', { for: 'q', text: 'Search' }), search),
       el('div', { class: 'field' }, el('label', { for: 'category', text: 'Category' }), select),
       el('div', { class: 'field' }, el('label', { for: 'chain', text: 'Chain' }), chainSelect),
       el('div', { class: 'field' }, el('span', { class: 'sub', text: 'Token status' }), el('div', { class: 'tabs' }, pre, live)),
+      el('div', { class: 'field check' }, el('label', { for: 'wl-only', text: 'Watchlist only' }), wlBox),
       el('span', { class: 'count', text: state.tab === 'pre-token' ? rows().length + ' rows shown' : DATA.live.length + ' live-token protocols' })
     );
   }
@@ -384,10 +393,10 @@
       el('div', { class: 'formula' },
         'implied = round( tvl_usd x ' + m.base_multiple + ' x category x growth x maturity x chains x scale )'
       ),
-      el('p', { class: 'sub', text: 'Base is TVL times ' + m.base_multiple + '. Category is the median market-cap-to-TVL of the live-token protocols in the same category, divided by the median over all live-token protocols, then shrunk toward 1.0 by n / (n + ' + m.shrink_prior + ') where n is the category\u2019s live sample count, and clamped to [' + m.category_floor + ', ' + m.category_cap + ']; a category with fewer than ' + m.category_min_samples + ' live samples scores 1.0. A multiple from three protocols is a rumour, one from thirty is a market. Growth is clamped to [' + m.growth_floor + ', ' + m.growth_cap + '] per cent; a rise counts at weight ' + m.growth_weight + ', a fall at weight ' + m.growth_weight_negative + ', so a shrinking protocol is punished twice as hard; a protocol with no reported seven-day move scores ' + m.unknown_growth_multiplier + ', because no momentum evidence is not the same as flat momentum. Maturity is ' + m.maturity_floor + ' plus up to ' + m.maturity_range + ' for the first ' + m.maturity_days + ' days listed, plus up to ' + m.longevity_bonus + ' more for the next ' + m.longevity_days + ' days. Chains adds ' + m.chain_step + ' per extra chain, up to ' + m.chain_max_extra + ' extra chains. Scale is the protocol\u2019s TVL divided by its category\u2019s median TVL, clamped to [' + m.scale_floor + ', ' + m.scale_cap + ']: within a category, the largest protocols are the ones a token would price highest. Age is the time since the protocol was first listed, the best record of how long it has run with no token; an unlisted age uses ' + m.unknown_age_days + ' days.' }),
+      el('p', { class: 'sub', text: 'Base is TVL times ' + m.base_multiple + '. Category is the median market-cap-to-TVL of the live-token protocols in the same category, divided by the median over all live-token protocols, then shrunk toward 1.0 by n / (n + ' + m.shrink_prior + ') where n is the category\u2019s live sample count, and clamped to [' + m.category_floor + ', ' + m.category_cap + ']; a category with fewer than ' + m.category_min_samples + ' live samples scores 1.0. A multiple from three protocols is a rumour, one from thirty is a market. Growth is clamped to [' + m.growth_floor + ', ' + m.growth_cap + '] per cent; a rise counts at weight ' + m.growth_weight + ', a fall at weight ' + m.growth_weight_negative + ', so a shrinking protocol is punished twice as hard; a protocol with no reported seven-day move scores ' + m.unknown_growth_multiplier + '. Maturity is ' + m.maturity_floor + ' plus up to ' + m.maturity_range + ' for the first ' + m.maturity_days + ' days listed, plus up to ' + m.longevity_bonus + ' more for the next ' + m.longevity_days + ' days. Chains adds ' + m.chain_step + ' per extra chain, up to ' + m.chain_max_extra + ' extra chains. Scale is the protocol\u2019s TVL divided by its category\u2019s median TVL, clamped to [' + m.scale_floor + ', ' + m.scale_cap + ']. Age is the time since the protocol was first listed; an unlisted age uses ' + m.unknown_age_days + ' days.' }),
       worked,
       el('h3', { text: 'Category multiples from this snapshot' }),
-      el('p', { class: 'sub', text: 'Each multiple is the median market-cap-to-TVL of that category\u2019s live-token protocols, divided by the median over all ' + DATA.live_count + ' live-token protocols and shrunk toward 1.0 by its sample count. Categories with fewer than ' + m.category_min_samples + ' live samples are not listed and score 1.0.' }),
+      el('p', { class: 'sub', text: 'Each multiple is the median market-cap-to-TVL of that category\u2019s live-token protocols, shrunk toward 1.0 by its sample count. Categories with fewer than ' + m.category_min_samples + ' live samples are not listed and score 1.0.' }),
       el('div', { class: 'table-wrap' },
         el('table', { class: 'mults' },
           el('thead', null, el('tr', null, el('th', { scope: 'col', text: 'Category' }), el('th', { scope: 'col', text: 'Multiple' }), el('th', { scope: 'col', text: 'Live samples' }))),
@@ -395,7 +404,7 @@
         )
       ),
       el('h3', { text: 'Scale references: median TVL by category' }),
-      el('p', { class: 'sub', text: 'Each reference is the median TVL of every protocol in that category, live and pre-token alike. A row above its category\u2019s median earns a scale above 1.0, a row below it takes below 1.0. The twelve largest are shown; the snapshot\u2019s global median TVL is ' + fmtUsd(DATA.scale_global_median_tvl_usd) + ' and covers every category too thin to list.' }),
+      el('p', { class: 'sub', text: 'Each reference is the median TVL of every protocol in that category, live and pre-token alike. The twelve largest are shown; the snapshot\u2019s global median TVL is ' + fmtUsd(DATA.scale_global_median_tvl_usd) + ' and covers every category too thin to list.' }),
       el('div', { class: 'table-wrap' },
         el('table', { class: 'mults' },
           el('thead', null, el('tr', null, el('th', { scope: 'col', text: 'Category' }), el('th', { scope: 'col', text: 'Median TVL' }), el('th', { scope: 'col', text: 'Protocols' }))),
