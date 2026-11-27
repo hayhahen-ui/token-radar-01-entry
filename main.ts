@@ -1,7 +1,7 @@
-// Token Radar 3 — the entrypoint: one sealed snapshot in, the ranked board out.
+// Token Radar 4 — the entrypoint: one sealed snapshot in, the ranked board out.
 //
 // The program reads the snapshot of every protocol DefiLlama tracks, scores the
-// pre-token ones with the radar-3 model in lib/model.ts, and writes everything the
+// pre-token ones with the radar-4 model in lib/model.ts, and writes everything the
 // gate and the judge read:
 //
 //   board.json    the ranked board: {"rows": [...]} by implied value, rank 1 first
@@ -63,7 +63,7 @@ function main(): void {
   const early = board.filter((row) => !snapshot.watchlist.includes(row.slug)).length;
   const live = radar.live.length;
   console.log(
-    `radar-3: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ` +
+    `radar-4: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ` +
       `${board.length} rows scored (${early} early, ${live} live set aside)`,
   );
 }
