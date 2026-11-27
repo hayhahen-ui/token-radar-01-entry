@@ -1,4 +1,4 @@
-/* Charts and compare tray for Token Radar 2.
+/* Charts and compare tray for Token Radar 3.
    Same paper/green palette as the board: paper #f5f5f2, panels white,
    accent green #166534, muted text #6b7280. No network, no images. */
 
@@ -103,6 +103,75 @@
   color: #6b7280;
   font-size: 12px;
   margin: 14px 0 0;
+}
+
+/* --- Value against size: the log-log scatter --- */
+.cx-scatter {
+  margin-top: 28px;
+}
+
+.cx-scatter-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.cx-scatter-svg text {
+  font-family: inherit;
+  fill: #111827;
+}
+
+.cx-axis {
+  font-size: 11px;
+  fill: #6b7280;
+}
+
+.cx-axis-y {
+  text-anchor: end;
+}
+
+.cx-gridline {
+  stroke: #efeee9;
+  stroke-width: 1;
+}
+
+.cx-baseline {
+  stroke: #166534;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  fill: none;
+}
+
+.cx-dot-w {
+  fill: #166534;
+}
+
+.cx-dot-e {
+  fill: #9aa5b1;
+}
+
+.cx-rank {
+  font-size: 10px;
+  font-weight: 700;
+  fill: #166534;
+}
+
+.cx-legend {
+  color: #6b7280;
+  font-size: 13px;
+  margin: 8px 0 0;
+}
+
+.cx-lg-w {
+  color: #166534;
+}
+
+.cx-lg-e {
+  color: #9aa5b1;
+}
+
+.cx-lg-b {
+  color: #166534;
 }
 
 /* --- Compare tray --- */

@@ -1,6 +1,6 @@
-// Token Radar's plain dashboard. It reads window.RADAR (written beside dashboard/ by main.ts) and
-// renders the ranked board, a filterable table, a per-protocol detail drawer with the model's own
-// inputs and the protocol's farm plan. No network: every byte it shows is in data.js.
+// Token Radar's plain dashboard, third version. It reads window.RADAR (written beside dashboard/ by
+// main.ts) and renders the ranked board, a filterable table, a per-protocol detail drawer with the
+// model's own inputs and the protocol's farm plan. No network: every byte it shows is in data.js.
 (function () {
   'use strict';
 
@@ -26,18 +26,34 @@
     if (days >= 365) return (days / 365).toFixed(1) + 'y';
     return Math.max(0, Math.round(days)) + 'd';
   }
+
+  // The category's median TVL, from the scale table the program ships: the reference the scale
+  // factor divides by. A category the table does not name falls back to the snapshot's global median.
+  var scaleByCategory = {};
+  (DATA.category_scale || []).forEach(function (c) { scaleByCategory[c.category] = c.median_tvl_usd; });
+  function scaleRefFor(category) {
+    var ref = scaleByCategory[category || 'Other'];
+    if (ref) return ref;
+    return DATA.scale_global_median_tvl_usd || 1;
+  }
+
   // The model in one function: the page recomputes a row from the snapshot figures and checks the
   // number board.json carries, so the page's code and the board's data are visibly the same arithmetic.
+  // Every multiplier is rounded to 4 places before it is multiplied in, exactly as the program does,
+  // so the recompute lands on exactly the number the board carries.
   function impliedOf(row, model) {
-    var growth = Math.min(model.growth_cap, Math.max(model.growth_floor, row.change_7d === null || row.change_7d === undefined ? 0 : row.change_7d));
+    var growthReported = row.change_7d !== null && row.change_7d !== undefined;
+    var growth = Math.min(model.growth_cap, Math.max(model.growth_floor, growthReported ? row.change_7d : 0));
     var weight = growth >= 0 ? model.growth_weight : model.growth_weight_negative;
-    var growthMult = 1 + (growth / 100) * weight;
+    var growthMult = Math.round((growthReported ? 1 + (growth / 100) * weight : model.unknown_growth_multiplier) * 1e4) / 1e4;
     var age = row.age_days === null || row.age_days === undefined ? model.unknown_age_days : row.age_days;
     var matured = Math.min(Math.max(age, 0), model.maturity_days);
     var extra = Math.min(Math.max(age - model.maturity_days, 0), model.longevity_days);
-    var maturity = model.maturity_floor + (matured / model.maturity_days) * model.maturity_range + (extra / model.longevity_days) * model.longevity_bonus;
-    var chainMult = 1 + model.chain_step * Math.min(Math.max((row.chains || []).length - 1, 0), model.chain_max_extra);
-    return Math.max(1, Math.round(row.tvl_usd * model.base_multiple * row.category_multiple * growthMult * maturity * chainMult));
+    var maturity = Math.round((model.maturity_floor + (matured / model.maturity_days) * model.maturity_range + (extra / model.longevity_days) * model.longevity_bonus) * 1e4) / 1e4;
+    var chainMult = Math.round((1 + model.chain_step * Math.min(Math.max((row.chains || []).length - 1, 0), model.chain_max_extra)) * 1e4) / 1e4;
+    var ref = scaleRefFor(row.category);
+    var scale = Math.round(Math.min(model.scale_cap, Math.max(model.scale_floor, row.tvl_usd / ref)) * 1e4) / 1e4;
+    return Math.max(1, Math.round(row.tvl_usd * model.base_multiple * row.category_multiple * growthMult * maturity * chainMult * scale));
   }
 
   function el(tag, attrs) {
@@ -62,7 +78,22 @@
   }
 
   // The farm plan is the same derivation main.ts writes to board.json: category, chains, TVL and age
-  // decide the action, the capital, the hold and every cost and time. No name is special-cased.
+  // decide the action, the capital, the hold and every cost and time. No name is special-cased, and
+  // the gas a step pays is the chain's own typical transaction cost.
+  var CHAIN_GAS_USD = {
+    ethereum: 8, arbitrum: 0.5, optimism: 0.4, base: 0.3, polygon: 0.05,
+    bsc: 0.3, binance: 0.3, avalanche: 0.5, solana: 0.05, zksync: 0.4,
+    linea: 0.3, scroll: 0.3, blast: 0.3, mantle: 0.2, mode: 0.2,
+    fraxtal: 0.2, gnosis: 0.1, fantom: 0.2, cronos: 0.1, near: 0.05,
+    sui: 0.05, aptos: 0.05, ton: 0.05, tron: 0.5, bitcoin: 2
+  };
+  function gasFor(chain) {
+    var g = CHAIN_GAS_USD[String(chain).toLowerCase()];
+    return g === undefined ? 2 : g;
+  }
+  function fmtGas(n) {
+    return n < 1 ? n.toFixed(2) : String(Math.round(n));
+  }
   function chainOf(p) { return p.chains && p.chains.length > 0 ? p.chains[0] : 'its main chain'; }
   function capitalFor(p) {
     if (p.tvl_usd >= 5e9) return 250;
@@ -116,11 +147,13 @@
     var chain = chainOf(p);
     var capital = capitalFor(p);
     var hold = holdDaysFor(p.age_days);
+    var gas = fmtGas(gasFor(chain));
     return [
-      { text: 'Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.', cost: 'under $3 of gas for the first transaction', time: '5 minutes' },
-      { text: actionFor(p, capital, chain), cost: '$' + capital + ' of capital and about $' + (capital >= 150 ? 8 : 4) + ' of gas on ' + chain, time: '15 minutes to set up' },
-      { text: weeklyActionFor(p, capital, chain), cost: 'about $2 of gas a week on ' + chain, time: '10 minutes a week' },
+      { text: 'Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.', cost: 'about $' + gas + ' of gas for the first transaction on ' + chain, time: '5 minutes' },
+      { text: actionFor(p, capital, chain), cost: '$' + capital + ' of capital and about $' + gas + ' of gas to set the position up on ' + chain, time: '15 minutes to set up' },
+      { text: weeklyActionFor(p, capital, chain), cost: 'about $' + gas + ' of gas a week on ' + chain, time: '10 minutes a week' },
       { text: 'Hold the position for at least ' + hold + ' days so the activity is counted in more than one snapshot.', cost: 'the $' + capital + ' stays in the position', time: hold + ' days' },
+      { text: "Once a month, open the protocol's own page and check the points balance, the eligibility rules and any new task, so a changed rule does not catch the position out.", cost: 'nothing to check', time: '10 minutes a month' },
       { text: "Before you withdraw, open the protocol's own points or rewards page and claim only from the link it publishes.", cost: 'no fee to check, and never pay to claim', time: '10 minutes' },
       { text: 'Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.', cost: 'nothing but the log', time: '5 minutes' }
     ].map(stepText);
@@ -336,19 +369,37 @@
         el('td', { class: 'num', text: String(c.samples) })
       );
     });
+    var scaleRows = (DATA.category_scale || []).slice(0, 12).map(function (c) {
+      return el('tr', null,
+        el('td', null, el('b', { text: c.category })),
+        el('td', { class: 'num', text: fmtUsd(c.median_tvl_usd) }),
+        el('td', { class: 'num', text: String(c.protocols) })
+      );
+    });
+    var top = DATA.rows && DATA.rows.length ? DATA.rows[0] : null;
+    var worked = top ? el('p', { class: 'sub', text: 'Worked example — rank 1, ' + top.name + ': ' + fmtUsd(top.tvl_usd) + ' of TVL x ' + m.base_multiple + ' = ' + fmtUsd(top.base_value_usd) + ' base; x category ' + top.category_multiple + ' (' + (top.category || 'Other') + ', ' + top.category_samples + ' live samples) x growth ' + top.growth_multiplier + ' x maturity ' + top.maturity_multiplier + ' x chains ' + top.chain_multiplier + ' x scale ' + top.scale_multiplier + ' (TVL against the ' + (top.category || 'Other') + ' median of ' + fmtUsd(top.scale_reference_tvl_usd) + ') = ' + fmtUsd(top.implied_value_usd) + '.' }) : null;
     return el('section', { class: 'panel model' },
       el('h2', { text: 'How the radar scores' }),
       el('p', { class: 'sub', text: 'Every row is scored by one function of the snapshot figures. No protocol name is special-cased, and no row is hand-picked.' }),
       el('div', { class: 'formula' },
-        'implied = round( tvl_usd x ' + m.base_multiple + ' x category x growth x maturity x chains )'
+        'implied = round( tvl_usd x ' + m.base_multiple + ' x category x growth x maturity x chains x scale )'
       ),
-      el('p', { class: 'sub', text: 'Base is TVL times ' + m.base_multiple + '. Category is the median market-cap-to-TVL of the live-token protocols in the same category, divided by the median over all live-token protocols, clamped to [' + m.category_floor + ', ' + m.category_cap + ']; a category with fewer than ' + m.category_min_samples + ' live samples scores 1.0. Growth is clamped to [' + m.growth_floor + ', ' + m.growth_cap + '] per cent; a rise counts at weight ' + m.growth_weight + ', a fall at weight ' + m.growth_weight_negative + ', so a shrinking protocol is punished twice as hard. Maturity is ' + m.maturity_floor + ' plus up to ' + m.maturity_range + ' for the first ' + m.maturity_days + ' days listed, plus up to ' + m.longevity_bonus + ' more for the next ' + m.longevity_days + ' days. Chains adds ' + m.chain_step + ' per extra chain, up to ' + m.chain_max_extra + ' extra chains. Age is the time since the protocol was first listed, the best record of how long it has run with no token; an unlisted age uses ' + m.unknown_age_days + ' days.' }),
+      el('p', { class: 'sub', text: 'Base is TVL times ' + m.base_multiple + '. Category is the median market-cap-to-TVL of the live-token protocols in the same category, divided by the median over all live-token protocols, then shrunk toward 1.0 by n / (n + ' + m.shrink_prior + ') where n is the category\u2019s live sample count, and clamped to [' + m.category_floor + ', ' + m.category_cap + ']; a category with fewer than ' + m.category_min_samples + ' live samples scores 1.0. A multiple from three protocols is a rumour, one from thirty is a market. Growth is clamped to [' + m.growth_floor + ', ' + m.growth_cap + '] per cent; a rise counts at weight ' + m.growth_weight + ', a fall at weight ' + m.growth_weight_negative + ', so a shrinking protocol is punished twice as hard; a protocol with no reported seven-day move scores ' + m.unknown_growth_multiplier + ', because no momentum evidence is not the same as flat momentum. Maturity is ' + m.maturity_floor + ' plus up to ' + m.maturity_range + ' for the first ' + m.maturity_days + ' days listed, plus up to ' + m.longevity_bonus + ' more for the next ' + m.longevity_days + ' days. Chains adds ' + m.chain_step + ' per extra chain, up to ' + m.chain_max_extra + ' extra chains. Scale is the protocol\u2019s TVL divided by its category\u2019s median TVL, clamped to [' + m.scale_floor + ', ' + m.scale_cap + ']: within a category, the largest protocols are the ones a token would price highest. Age is the time since the protocol was first listed, the best record of how long it has run with no token; an unlisted age uses ' + m.unknown_age_days + ' days.' }),
+      worked,
       el('h3', { text: 'Category multiples from this snapshot' }),
-      el('p', { class: 'sub', text: 'Each multiple is the median market-cap-to-TVL of that category\u2019s live-token protocols, divided by the median over all ' + DATA.live_count + ' live-token protocols. Categories with fewer than ' + m.category_min_samples + ' live samples are not listed and score 1.0.' }),
+      el('p', { class: 'sub', text: 'Each multiple is the median market-cap-to-TVL of that category\u2019s live-token protocols, divided by the median over all ' + DATA.live_count + ' live-token protocols and shrunk toward 1.0 by its sample count. Categories with fewer than ' + m.category_min_samples + ' live samples are not listed and score 1.0.' }),
       el('div', { class: 'table-wrap' },
         el('table', { class: 'mults' },
           el('thead', null, el('tr', null, el('th', { scope: 'col', text: 'Category' }), el('th', { scope: 'col', text: 'Multiple' }), el('th', { scope: 'col', text: 'Live samples' }))),
           el('tbody', null, multRows)
+        )
+      ),
+      el('h3', { text: 'Scale references: median TVL by category' }),
+      el('p', { class: 'sub', text: 'Each reference is the median TVL of every protocol in that category, live and pre-token alike. A row above its category\u2019s median earns a scale above 1.0, a row below it takes below 1.0. The twelve largest are shown; the snapshot\u2019s global median TVL is ' + fmtUsd(DATA.scale_global_median_tvl_usd) + ' and covers every category too thin to list.' }),
+      el('div', { class: 'table-wrap' },
+        el('table', { class: 'mults' },
+          el('thead', null, el('tr', null, el('th', { scope: 'col', text: 'Category' }), el('th', { scope: 'col', text: 'Median TVL' }), el('th', { scope: 'col', text: 'Protocols' }))),
+          el('tbody', null, scaleRows)
         )
       ),
       el('p', { class: 'sub', text: 'The early radar is every pre-token protocol below the watchlist floor, by TVL, and the live-token protocols are set aside with their market caps shown.' })
@@ -378,12 +429,13 @@
       el('div', { class: 'equation' },
         el('div', null, el('span', { text: 'TVL' }), el('b', { class: 'num', text: fmtUsd(row.tvl_usd) })),
         el('div', null, el('span', { text: 'Base (TVL x 0.25)' }), el('b', { class: 'num', text: fmtUsd(row.base_value_usd) })),
-        el('div', null, el('span', { text: 'Category multiple (' + (row.category || 'Other') + ')' }), el('b', { class: 'num', text: String(row.category_multiple) })),
-        el('div', null, el('span', { text: 'Seven-day growth' }), el('b', { class: 'num', text: fmtPct(row.change_7d) })),
+        el('div', null, el('span', { text: 'Category multiple (' + (row.category || 'Other') + ', ' + row.category_samples + ' live samples)' }), el('b', { class: 'num', text: String(row.category_multiple) })),
+        el('div', null, el('span', { text: 'Seven-day growth' }), el('b', { class: 'num', text: row.growth_reported ? fmtPct(row.change_7d) : 'unreported (scores 0.98)' })),
         el('div', null, el('span', { text: 'Age with no token' }), el('b', { class: 'num', text: fmtAge(row.age_days) })),
         el('div', null, el('span', { text: 'Growth multiplier' }), el('b', { class: 'num', text: String(row.growth_multiplier) })),
         el('div', null, el('span', { text: 'Maturity multiplier' }), el('b', { class: 'num', text: String(row.maturity_multiplier) })),
         el('div', null, el('span', { text: 'Chain multiplier (' + (row.chains || []).length + ' chains)' }), el('b', { class: 'num', text: String(row.chain_multiplier) })),
+        el('div', null, el('span', { text: 'Scale multiplier (TVL vs ' + (row.category || 'Other') + ' median ' + fmtUsd(row.scale_reference_tvl_usd) + ')' }), el('b', { class: 'num', text: String(row.scale_multiplier) })),
         el('div', null, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) }))
       ),
       el('p', { class: 'sub', text: 'Model ' + DATA.model_version + ': the same function scores every protocol. The page recomputes this row as ' + fmtUsd(impliedOf(row, DATA.model)) + (impliedOf(row, DATA.model) === row.implied_value_usd ? ', the same number board.json carries.' : ', which differs from the board: the data would be stale.') + ' This is an estimate, not a price.' })

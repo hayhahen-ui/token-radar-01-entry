@@ -1,10 +1,11 @@
-/* Charts and compare tray for Token Radar 2.
+/* Charts and compare tray for Token Radar 3.
    Drawn only from window.RADAR, the data the page already ships.
-   No network, no extra source: the top-10 chart and the category
-   breakdown recompute from the same 226 board rows, and the compare
-   tray reads each protocol's farm plan from the board file beside
-   the page when it is there. Runs after app.js renders the board,
-   and re-attaches whenever the board re-renders (sort, filter, tab). */
+   No network, no extra source: the top-10 chart, the category
+   breakdown and the value-against-size scatter recompute from the
+   same board rows, and the compare tray reads each protocol's farm
+   plan from the board file beside the page when it is there. Runs
+   after app.js renders the board, and re-attaches whenever the board
+   re-renders (sort, filter, tab). */
 (function () {
   "use strict";
 
@@ -126,6 +127,53 @@
     }).join("");
   }
 
+  /* ---------- Value against size: one log-log scatter of the whole board ----------
+     x is TVL, y is implied value, both on a log scale. The dashed line is the base
+     alone, implied = TVL x 0.25: a dot above it is lifted by category, growth,
+     maturity, chains and scale; a dot below it is discounted. The spread around the
+     line is the model, not the size. Watchlist rows are green, early rows grey. */
+  function scatterSvg(all) {
+    var W = 620, H = 330, L = 48, R = 10, T = 10, B = 30;
+    var pw = W - L - R, ph = H - T - B;
+    var xs = all.map(function (r) { return Math.log10(Math.max(1, r.tvl_usd)); });
+    var ys = all.map(function (r) { return Math.log10(Math.max(1, r.implied_value_usd)); });
+    var x0 = Math.floor(Math.min.apply(null, xs));
+    var x1 = Math.ceil(Math.max.apply(null, xs));
+    var y0 = Math.floor(Math.min.apply(null, ys));
+    var y1 = Math.ceil(Math.max.apply(null, ys));
+    function X(v) { return L + ((v - x0) / (x1 - x0)) * pw; }
+    function Y(v) { return T + ph - ((v - y0) / (y1 - y0)) * ph; }
+    var out = [];
+    out.push('<svg class="cx-scatter-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Implied value against TVL, log scale, for every board row">');
+    var p;
+    for (p = x0; p <= x1; p++) {
+      out.push('<line x1="' + X(p).toFixed(1) + '" y1="' + T + '" x2="' + X(p).toFixed(1) + '" y2="' + (T + ph) + '" class="cx-gridline"/>');
+      out.push('<text x="' + X(p).toFixed(1) + '" y="' + (T + ph + 18) + '" class="cx-axis">' + esc(money(Math.pow(10, p))) + "</text>");
+    }
+    for (p = y0; p <= y1; p++) {
+      out.push('<line x1="' + L + '" y1="' + Y(p).toFixed(1) + '" x2="' + (L + pw) + '" y2="' + Y(p).toFixed(1) + '" class="cx-gridline"/>');
+      out.push('<text x="' + (L - 6) + '" y="' + (Y(p).toFixed(1) + 4) + '" class="cx-axis cx-axis-y">' + esc(money(Math.pow(10, p))) + "</text>");
+    }
+    // The base line, implied = TVL x 0.25, clipped to the plot.
+    var b = Math.log10(0.25);
+    var bx0 = x0, by0 = x0 + b;
+    if (by0 < y0) { bx0 = y0 - b; by0 = y0; }
+    var bx1 = x1, by1 = x1 + b;
+    if (by1 > y1) { bx1 = y1 - b; by1 = y1; }
+    out.push('<line x1="' + X(bx0).toFixed(1) + '" y1="' + Y(by0).toFixed(1) + '" x2="' + X(bx1).toFixed(1) + '" y2="' + Y(by1).toFixed(1) + '" class="cx-baseline"/>');
+    all.forEach(function (r) {
+      var cx = X(Math.log10(Math.max(1, r.tvl_usd)));
+      var cy = Y(Math.log10(Math.max(1, r.implied_value_usd)));
+      var watch = !!r.watchlist;
+      out.push('<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + (watch ? 4 : 2.5) + '" class="' + (watch ? "cx-dot-w" : "cx-dot-e") + '"><title>' + esc(r.name) + " — TVL " + esc(money(r.tvl_usd)) + ", implied " + esc(money(r.implied_value_usd)) + "</title></circle>");
+      if (r.rank <= TOP_N) {
+        out.push('<text x="' + (cx + 6).toFixed(1) + '" y="' + (cy + 3.5).toFixed(1) + '" class="cx-rank">' + r.rank + "</text>");
+      }
+    });
+    out.push("</svg>");
+    return out.join("");
+  }
+
   /* ---------- Compare tray ---------- */
   function loadFarmSteps() {
     if (farmTried) return;
@@ -163,6 +211,7 @@
       ["Growth multiplier", function (r) { return mult(r.growth_multiplier); }],
       ["Maturity multiplier", function (r) { return mult(r.maturity_multiplier); }],
       ["Chain multiplier", function (r) { return mult(r.chain_multiplier); }],
+      ["Scale multiplier", function (r) { return mult(r.scale_multiplier); }],
     ];
     return defs.map(function (d) {
       var cells = picked.map(function (r) {
@@ -348,6 +397,11 @@
       "<div><h2>Where the value sits</h2>" +
       '<p class="cx-sub">Implied value summed by category, across all ' + all.length + " board rows.</p>" +
       categoryRows(all) + "</div></div>" +
+      '<div class="cx-scatter"><h2>Value against size: what the model adds beyond TVL</h2>' +
+      '<p class="cx-sub">Implied value against TVL, both on a log scale, for all ' + all.length + " board rows.</p>" +
+      scatterSvg(all) +
+      '<p class="cx-legend"><span class="cx-lg-w">●</span> Watchlist &nbsp; <span class="cx-lg-e">●</span> Early rows below the floor &nbsp; <span class="cx-lg-b">– –</span> Base line: TVL x 0.25</p>' +
+      '<p class="cx-sub">Dots above the line are lifted by category, growth, maturity, chains and scale; dots below it are discounted. The spread around the line is the model, not the size.</p></div>' +
       '<p class="cx-note">Charts are drawn from the same board data the page already ships — no extra source, no network.</p>';
     var controls = shell.querySelector(".controls");
     var panel = shell.querySelector(".panel");
