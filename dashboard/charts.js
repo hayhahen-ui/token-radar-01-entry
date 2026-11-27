@@ -1,4 +1,4 @@
-/* Charts and compare tray for Token Radar 3.
+/* Charts and compare tray for Token Radar 4.
    Drawn only from window.RADAR, the data the page already ships.
    No network, no extra source: the top-10 chart, the category
    breakdown and the value-against-size scatter recompute from the
