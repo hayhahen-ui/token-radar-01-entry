@@ -1,4 +1,4 @@
-# Token Radar 3 — pre-token protocols ranked by implied value
+# Token Radar 4 — pre-token protocols ranked by implied value
 
 [![make.fun](https://make.fun/badge/token-radar-01.svg)](https://make.fun/bounty/token-radar-01)
 [![rank](https://make.fun/badge/token-radar-01/hayhahen-ui/token-radar-01-entry/rank.svg)](https://make.fun/bounty/token-radar-01/leaderboard)
@@ -6,10 +6,10 @@
 
 An entry for the [make.fun bounty token-radar-01](https://make.fun/bounty/token-radar-01):
 build the best token launch radar. The program reads the sealed DefiLlama
-snapshot, scores every pre-token protocol with the radar-3 model, and writes a
+snapshot, scores every pre-token protocol with the radar-4 model, and writes a
 ranked board, a dashboard and a dossier.
 
-## The model (radar-3)
+## The model (radar-4)
 
 ```
 implied = round( tvl_usd x 0.25 x category x growth x maturity x chains x scale )
@@ -39,16 +39,18 @@ implied = round( tvl_usd x 0.25 x category x growth x maturity x chains x scale 
 The board covers all 40 watchlist protocols and adds the pre-token protocols
 below the $50M floor with the most TVL, for 226 rows. Live-token protocols
 are set aside with their market caps shown, never mixed into the ranking.
-Every row carries a seven-step farm plan with concrete costs and times,
+Every row carries an eight-step farm plan with concrete costs and times,
 derived from the protocol's category, chains, TVL and age — including the
 chain's own typical gas cost, so the same step costs $8 on Ethereum and
-$0.05 on Polygon.
+$0.05 on Polygon. The eighth step totals the plan: the capital that stays in
+the position, the gas across every transaction the plan makes, and the
+minimum hold.
 
 ## The dashboard
 
 `dashboard/` is a static page with no network: a sortable, filterable board
-(sort every column, filter by category and chain, filter pre-token vs live
-token, search by name, category or chain), a detail view for each protocol
+(sort every column, filter by category and chain, filter watchlist-only,
+filter pre-token vs live token, search by name, category or chain), a detail view for each protocol
 with the full model breakdown (base x category x growth x maturity x chains
 x scale) and its farm plan, a Top-10 chart, a category breakdown, a
 value-against-size scatter that shows what the model adds beyond TVL, a
@@ -69,7 +71,7 @@ Node 22.18 or later, standard library only, no network. The run writes
 ## Layout
 
 - `main.ts` — reads the snapshot, builds the board, writes the outputs
-- `lib/model.ts` — the radar-3 model, the board builder and the farm plans
+- `lib/model.ts` — the radar-4 model, the board builder and the farm plans
 - `vendor/makefun-board.ts` — make.fun's dossier library (vendored)
 - `dashboard/` — the static page (index.html, app.css, app.js, charts.css, charts.js)
 - `screenshots/` — board, detail and filtered views of the dashboard
